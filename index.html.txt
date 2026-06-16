@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>School Homework Auto-Bot</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { background: #16213e; padding: 40px; border-radius: 15px; box-shadow: 0 0 20px rgba(0,0,0,0.5); width: 450px; }
+        h2 { text-align: center; color: #e94560; margin-top: 0; }
+        .input-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: #aeb8c3; font-size: 14px; }
+        input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #0f3460; background: #0f3460; color: white; box-sizing: border-box; font-size: 14px; }
+        input:focus { outline: none; border-color: #e94560; }
+        button { width: 100%; padding: 14px; background: #e94560; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; margin-top: 10px; transition: 0.3s; }
+        button:hover { background: #c1354d; }
+        button:disabled { background: #555; cursor: not-defined; }
+        #log { margin-top: 20px; height: 200px; overflow-y: auto; background: #0f3460; padding: 10px; border-radius: 8px; font-size: 13px; color: #aeb8c3; font-family: monospace; }
+        .log-entry { margin-bottom: 4px; border-bottom: 1px solid #1a1a2e; padding-bottom: 2px; }
+        .success { color: #4caf50; }
+        .error { color: #e94560; }
+        .stats { display: flex; justify-content: space-between; margin-bottom: 15px; padding: 10px; background: #0f3460; border-radius: 8px; }
+        .stat-box { text-align: center; }
+        .stat-num { font-size: 24px; font-weight: bold; color: #e94560; }
+        .stat-label { font-size: 12px; color: #aeb8c3; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🤖 Homework Auto-Bot</h2>
+    
+    <div class="stats">
+        <div class="stat-box">
+            <div class="stat-num" id="qCount">0</div>
+            <div class="stat-label">Questions Answered</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-num" id="status">Ready</div>
+            <div class="stat-label">Status</div>
+        </div>
+    </div>
+
+    <div class="input-group">
+        <label>School Email</label>
+        <input type="email" id="email" placeholder="student@school.co.uk">
+    </div>
+    <div class="input-group">
+        <label>Password</label>
+        <input type="password" id="password" placeholder="Enter password">
+    </div>
+    <div class="input-group">
+        <label>Start Time (24hr, e.g., 14:30)</label>
+        <input type="time" id="startTime" value="14:30">
+    </div>
+    
+    <button id="startBtn" onclick="startBot()">Launch Bot</button>
+
+    <div id="log"></div>
+</div>
+
+<script>
+    const logDiv = document.getElementById('log');
+    const startBtn = document.getElementById('startBtn');
+    const qCountEl = document.getElementById('qCount');
+    const statusEl = document.getElementById('status');
+    let ws;
+
+    function log(msg, type='normal') {
+        const entry = document.createElement('div');
+        entry.className = 'log-entry ' + type;
+        entry.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        logDiv.prepend(entry);
+    }
+
+    function startBot() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const startTime = document.getElementById('startTime').value;
+
+        if(!email || !password) {
+            log("Please enter Email and Password", "error");
+            return;
+        }
+
+        startBtn.disabled = true;
+        startBtn.innerText = "Running...";
+        statusEl.innerText = "Waiting...";
+        statusEl.style.color = "#4caf50";
+        qCountEl.innerText = "0";
+
+        // Send config to backend
+        fetch('/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({email, password, startTime})
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.status === 'success') {
+                log("Bot started at server!", "success");
+                connectWebSocket();
+            } else {
+                log(data.message, "error");
+                startBtn.disabled = false;
+                startBtn.innerText = "Launch Bot";
+            }
+        });
+    }
+
+    function connectWebSocket() {
+        // Simple WebSocket connection for live updates
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            if(data.type === 'question') {
+                qCountEl.innerText = data.count;
+                log(`✅ Answered Q${data.count}: ${data.detail}`);
+            } else if (data.type === 'log') {
+                log(data.message);
+            } else if (data.type === 'finish') {
+                statusEl.innerText = "Done";
+                startBtn.disabled = false;
+                startBtn.innerText = "Launch Bot";
+                log("🏁 Bot Finished!", "success");
+            }
+        };
+    }
+</script>
+
+</body>
+</html>
